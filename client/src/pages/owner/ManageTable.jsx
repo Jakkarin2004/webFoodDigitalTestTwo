@@ -11,9 +11,9 @@ import {
   Eye,
 } from "lucide-react";
 import axios from "axios";
-
-//เอาไว้ทำ modal
 import toast from "react-hot-toast";
+import { PDFDocument, rgb } from "pdf-lib"; // เปลี่ยนจาก @pdf-lib/pdfkit เป็น @pdf-lib
+import fontkit from "@pdf-lib/fontkit";
 
 const API_URL_TEBLE = "http://localhost:3000/api/owner/tables";
 
@@ -23,26 +23,26 @@ const ManageTable = () => {
   const [editingTable, setEditingTable] = useState(null);
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedTable, setSelectedTable] = useState(null);
-
-  //ยืนยันลบ
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   useEffect(() => {
     fetchTables();
   }, []);
+
   useEffect(() => {
     console.log("🔥 ตารางที่โหลดมา:", tables);
   }, [tables]);
+
   const fetchTables = async () => {
     try {
-      // เรียก API จริงด้วย axios
-      const response = await axios.get(`${API_URL_TEBLE}`);
-      // สมมติ API ตอบ JSON array ของโต๊ะตรง ๆ
-      setTables(response.data);
+      const response = await axios.get(API_URL_TEBLE);
+      setTables(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error("❌ เกิดข้อผิดพลาดในการโหลดข้อมูลโต๊ะ:", error);
+      toast.error("ไม่สามารถโหลดข้อมูลโต๊ะได้");
     }
   };
+
   const [formData, setFormData] = useState({
     table_number: "",
     table_name: "",
@@ -65,7 +65,6 @@ const ManageTable = () => {
 
     try {
       if (editingTable) {
-        // Update existing table ผ่าน API
         const updatedTable = {
           table_number: formData.table_number,
           table_name: formData.table_name,
@@ -74,7 +73,6 @@ const ManageTable = () => {
           `${API_URL_TEBLE}/${editingTable.table_id}`,
           updatedTable
         );
-        // อัปเดต state หลังจาก update สำเร็จ
         setTables(
           tables.map((table) =>
             table.table_id === editingTable.table_id
@@ -82,24 +80,22 @@ const ManageTable = () => {
               : table
           )
         );
+        toast.success("แก้ไขโต๊ะสำเร็จ");
       } else {
-        // เพิ่มโต๊ะใหม่ผ่าน API
         const newTablePayload = {
           table_number: formData.table_number,
           table_name: formData.table_name,
         };
-        const response = await axios.post(`${API_URL_TEBLE}`, newTablePayload);
-        const newTableFromServer = response.data; // สมมติ API ส่งข้อมูลโต๊ะกลับมา
-
-        // อัปเดต state เพิ่มข้อมูลใหม่
-        setTables([...tables, newTableFromServer]);
+        const response = await axios.post(API_URL_TEBLE, newTablePayload);
+        setTables([...tables, response.data]);
+        toast.success("เพิ่มโต๊ะใหม่สำเร็จ");
       }
-
       resetForm();
-      toast.success(editingTable ? "แก้ไขโต๊ะสำเร็จ" : "เพิ่มโต๊ะใหม่สำเร็จ");
     } catch (error) {
       console.error("❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลโต๊ะ:", error);
-      toast.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลโต๊ะ");
+      toast.error(
+        error.response?.data?.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูลโต๊ะ"
+      );
     }
   };
 
@@ -123,10 +119,10 @@ const ManageTable = () => {
         prev.filter((table) => table.table_id !== confirmDeleteId)
       );
       toast.success("ลบโต๊ะสำเร็จ!");
-      setConfirmDeleteId(null); // ปิด modal หลังลบ
-    } catch (err) {
-      console.error("❌ เกิดข้อผิดพลาดในการลบโต๊ะ:", err);
-      toast.error("ไม่สามารถลบโต๊ะได้");
+      setConfirmDeleteId(null);
+    } catch (error) {
+      console.error("❌ เกิดข้อผิดพลาดในการลบโต๊ะ:", error);
+      toast.error(error.response?.data?.message || "ไม่สามารถลบโต๊ะได้");
     }
   };
 
@@ -135,24 +131,88 @@ const ManageTable = () => {
     setShowQRModal(true);
   };
 
-  const handleDownloadQR = (table) => {
-    // Simulate QR code download
-    toast(
-      `ดาวน์โหลด QR Code สำหรับ ${table.table_name || table.table_number}`,
-      {
-        duration: 6000,
+  const handleDownloadQR = async (table) => {
+    try {
+      if (!table.qrcode_image) {
+        toast.error("ไม่พบ QR Code สำหรับโต๊ะนี้");
+        return;
       }
-    );
+
+      // สร้าง PDF ใหม่ด้วย @pdf-lib
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.registerFontkit(fontkit);
+
+      // โหลดฟอนต์ภาษาไทยจาก public/fonts/ โดยใช้พาธสัมบolute
+      const fontUrl = `/fonts/Sarabun-Regular.ttf`;
+      const fontBytes = await fetch(fontUrl).then((res) => res.arrayBuffer());
+      const customFont = await pdfDoc.embedFont(fontBytes);
+
+      // โหลดรูปภาพ QR Code
+      const qrImageUrl = `http://localhost:3000/uploads/qrcode/${table.qrcode_image}`;
+      const qrResponse = await fetch(qrImageUrl);
+      const qrImageBytes = await qrResponse.arrayBuffer();
+      const qrImage = await pdfDoc.embedPng(qrImageBytes);
+
+      // เพิ่มหน้าใหม่
+      const page = pdfDoc.addPage([595.28, 841.89]); // A4 size in points (210mm x 297mm)
+
+      // ตั้งค่าฟอนต์และสี
+      const fontSize = 28;
+      const textColor = rgb(0.13, 0.13, 0.3); //สีเทาเข้ม
+
+      // เพิ่มชื่อโต๊ะ
+      const tableName = table.table_name || `โต๊ะ ${table.table_number}`;
+      page.drawText(tableName, {
+        x: 275,
+        y: 450,
+        size: fontSize,
+        font: customFont,
+        color: textColor,
+      });
+
+      // เพิ่มหมายเลขโต๊ะ
+      page.drawText(`โต๊ะหมายเลข: ${table.table_number}`, {
+        x: 230,
+        y: 400,
+        size: 20,
+        font: customFont,
+        color: textColor,
+      });
+
+      // เพิ่ม QR Code ตรงกลาง
+      const qrSize = 70; // ขนาดใน mm
+      const qrWidth = (qrSize / 25.4) * 72; // แปลง mm เป็น points (1 mm = 72/25.4 points)
+      const pageWidth = 595.28; // ความกว้าง A4 ใน points
+      const qrX = (pageWidth - qrWidth) / 2;
+      page.drawImage(qrImage, {
+        x: qrX,
+        y: 500,
+        width: qrWidth,
+        height: qrWidth,
+      });
+
+      // ดาวน์โหลด PDF
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `QRCode_${table.table_number}.pdf`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      toast.success(`ดาวน์โหลด QR Code สำหรับ ${tableName} สำเร็จ!`);
+    } catch (error) {
+      console.error("เกิดข้อผิดพลาดในการดาวน์โหลด QR Code:", error);
+      toast.error("เกิดข้อผิดพลาดในการดาวน์โหลด QR Code");
+    }
   };
 
   const generateQRCodeData = (table) => {
-    return `https://restaurant.com/order?table=${table.table_number}`;
+    return `http://localhost:5173/user-home/table/${table.table_number}/order`;
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100 p-4">
       <div className="max-w-8xl mx-auto">
-        
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-xl mb-6 p-6 border-l-4 border-orange-500">
           <div className="flex justify-between items-center">
@@ -290,7 +350,6 @@ const ManageTable = () => {
                   </p>
                 </div>
 
-                {/* QR Code Placeholder */}
                 <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl p-8 mb-6">
                   <div className="w-48 h-48 mx-auto bg-white border border-gray-200 rounded-lg flex items-center justify-center">
                     <div className="text-center">
@@ -301,8 +360,6 @@ const ManageTable = () => {
                         height={150}
                         className="mx-auto mb-2"
                       />
-
-                      {/* <p className="text-xs text-gray-500">QR Code Preview</p> */}
                       <p className="text-xs text-gray-400 mt-1">
                         {generateQRCodeData(selectedTable)}
                       </p>
@@ -362,7 +419,7 @@ const ManageTable = () => {
               <tbody className="divide-y divide-gray-200">
                 {tables.map((table, index) => (
                   <tr
-                    key={`${table.table_id}-${index}`} // ✅ ป้องกัน key ซ้ำ
+                    key={`${table.table_id}-${index}`}
                     className={`hover:bg-orange-50 transition-colors ${
                       index % 2 === 0 ? "bg-white" : "bg-gray-50"
                     }`}
@@ -376,9 +433,7 @@ const ManageTable = () => {
                           <p className="font-bold text-lg text-gray-800">
                             {table.table_number}
                           </p>
-                          <p className="text-sm text-gray-500">
-                            ID: {table.table_id}
-                          </p>
+                          
                         </div>
                       </div>
                     </td>
@@ -387,7 +442,6 @@ const ManageTable = () => {
                         {table.table_name || "-"}
                       </p>
                     </td>
-                   
                     <td className="px-6 py-4 text-gray-600">
                       {new Date(table.created_at).toLocaleString("th-TH", {
                         day: "2-digit",
@@ -397,26 +451,26 @@ const ManageTable = () => {
                         minute: "2-digit",
                       })}
                     </td>
-
-                     <td className="px-6 py-4">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-green-100 to-green-200 text-green-700 border border-green-200">
-                          <button onClick={() => handleGenerateQR(table)}>
-                            <Eye size={16} />
-                          </button>
-                        </span>
+                        <button
+                          onClick={() => handleGenerateQR(table)}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-green-100 to-green-200 text-green-700 border border-green-200"
+                        >
+                          <Eye size={16} />
+                          ดู QR Code
+                        </button>
                       </div>
-                    </td> 
-
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
-                        {/* <button
-                                                    onClick={() => handleEdit(table)}
-                                                    className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition-colors shadow-md transform hover:scale-105"
-                                                    title="แก้ไข"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button> */}
+                        <button
+                          onClick={() => handleEdit(table)}
+                          className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-lg transition-colors shadow-md transform hover:scale-105"
+                          title="แก้ไข"
+                        >
+                          <Edit2 size={16} />
+                        </button>
                         <button
                           onClick={() => confirmDelete(table.table_id)}
                           className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition-colors shadow-md transform hover:scale-105"
@@ -458,7 +512,6 @@ const ManageTable = () => {
               </div>
             </div>
           </div>
-
           <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500">
             <div className="flex items-center justify-between">
               <div>
@@ -474,18 +527,6 @@ const ManageTable = () => {
               </div>
             </div>
           </div>
-
-          {/* <div className="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm font-semibold text-gray-600">โต๊ะที่ใช้งานได้</p>
-                                <p className="text-3xl font-bold text-gray-800">{tables.length}</p>
-                            </div>
-                            <div className="bg-blue-100 p-3 rounded-xl">
-                                <Save size={24} className="text-blue-600" />
-                            </div>
-                        </div>
-                    </div> */}
         </div>
       </div>
 
@@ -500,7 +541,7 @@ const ManageTable = () => {
           >
             <h2 className="text-xl font-bold text-red-600 mb-4">ยืนยันการลบ</h2>
             <p className="text-gray-700 mb-6">
-              คุณแน่ใจหรือไม่ว่าต้องการลบพนักงานนี้? การลบจะไม่สามารถย้อนกลับได้
+              คุณแน่ใจหรือไม่ว่าต้องการลบโต๊ะนี้? การลบจะไม่สามารถย้อนกลับได้
             </p>
             <div className="flex justify-end gap-3">
               <button

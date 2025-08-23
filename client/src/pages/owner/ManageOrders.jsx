@@ -13,8 +13,6 @@ import {
   Users,
   RefreshCw,
 } from "lucide-react";
-
-//เอาไว้ทำ modal
 import toast from "react-hot-toast";
 
 const API_URL_ORDER = "http://localhost:3000/api/owner/orders";
@@ -28,15 +26,12 @@ const ManageOrders = () => {
   const [sortBy, setSortBy] = useState("order_time");
   const [sortOrder, setSortOrder] = useState("desc");
   const [selectedOrder, setSelectedOrder] = useState(null);
-  //ยอดขาย
-   const [revenueData, setRevenueData] = useState(null);
-  // 
-    const token = useAuthStore((state) => state.token);
-  // 
+  const [revenueData, setRevenueData] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
 
+  const token = useAuthStore((state) => state.token);
   const socket = io("http://localhost:3000");
-
-
 
   const orderStatuses = {
     pending: {
@@ -66,7 +61,6 @@ const ManageOrders = () => {
     },
   };
 
-  
   useEffect(() => {
     if (!token) return;
 
@@ -78,7 +72,6 @@ const ManageOrders = () => {
         const orders = res.data.orders;
         setOrders(orders);
 
-        // ✅ ดึงรายละเอียดแบบ Promise.all
         const detailsResult = await Promise.all(
           orders.map((order) =>
             axios
@@ -102,7 +95,6 @@ const ManageOrders = () => {
 
     fetchData();
 
-    // ✅ ใช้งาน socket
     const handleNewOrder = async (newOrder) => {
       setOrders((prev) => [newOrder, ...prev]);
 
@@ -124,36 +116,42 @@ const ManageOrders = () => {
     return () => {
       socket.off("new_order", handleNewOrder);
     };
-  }, [token]); // ✅ หาก token เปลี่ยน ควร fetch ใหม่
+  }, [token]);
 
+  useEffect(() => {
+    const token = useAuthStore.getState().token;
 
-useEffect(() => {
-  const token = useAuthStore.getState().token;
+    axios
+      .get(API_URL_REVENUE, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      .then((res) => setRevenueData(res.data))
+      .catch((err) => console.error("โหลดข้อมูลยอดขายล้มเหลว", err));
 
-  // ดึงข้อมูลยอดขายตอนหน้าโหลดครั้งแรก
-  axios
-    .get("http://localhost:3000/api/owner/orders/today-revenue", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((res) => setRevenueData(res.data))
-    .catch((err) => console.error("โหลดข้อมูลยอดขายล้มเหลว", err));
+    const handleRevenueUpdate = (data) => {
+      console.log("ได้รับข้อมูลยอดขาย realtime:", data);
+      setRevenueData(data);
+    };
 
-  // ฟัง event อัปเดตยอดขาย realtime
-  const handleRevenueUpdate = (data) => {
-    console.log("ได้รับข้อมูลยอดขาย realtime:", data);
-    setRevenueData(data);
-  };
+    socket.on("today_revenue_updated", handleRevenueUpdate);
+    return () => {
+      socket.off("today_revenue_updated", handleRevenueUpdate);
+    };
+  }, []);
 
-  socket.on("today_revenue_updated", handleRevenueUpdate);
+  useEffect(() => {
+    socket.on("order_status_updated", ({ orderId, status }) => {
+      setOrders((prevOrders) =>
+        prevOrders.map((order) =>
+          order.order_id === orderId ? { ...order, status } : order
+        )
+      );
+    });
 
-  // cleanup ถ้า component ถูกถอดออก
-  return () => {
-    socket.off("today_revenue_updated", handleRevenueUpdate);
-  };
-}, []);
-
-
-
+    return () => {
+      socket.off("order_status_updated");
+    };
+  }, []);
 
   const formatPrice = (price) => {
     if (!price) return "฿0.00";
@@ -174,24 +172,18 @@ useEffect(() => {
     });
   };
 
-   // ฟัง event realtime จาก socket.io
-   // ✅ ฟังการเปลี่ยนสถานะแบบ realtime
-  useEffect(() => {
-    socket.on("order_status_updated", ({ orderId, status }) => {
-      setOrders((prevOrders) =>
-        prevOrders.map((order) =>
-          order.order_id === orderId ? { ...order, status } : order
-        )
-      );
-    });
-
-    return () => {
-      socket.off("order_status_updated");
-    };
-  }, []);
-
-  // ✅ เปลี่ยนสถานะออเดอร์
   const updateOrderStatus = async (orderId, newStatus) => {
+    if (newStatus === "completed" && orders.find((o) => o.order_id === orderId)?.status !== "ready") {
+      toast.error("สามารถเปลี่ยนเป็นเสร็จสิ้นได้เฉพาะเมื่อสถานะเป็น 'พร้อมเสิร์ฟ' เท่านั้น");
+      return;
+    }
+
+    if (newStatus === "completed") {
+      setSelectedOrderId(orderId);
+      setShowConfirmModal(true);
+      return;
+    }
+
     try {
       await axios.put(
         `${API_URL_ORDER}/${orderId}/status`,
@@ -200,10 +192,27 @@ useEffect(() => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      // *ไม่ต้อง setOrders ตรงนี้ เพราะ socket จะทำให้แล้ว*
     } catch (err) {
-      console.error("❌ เปลี่ยนสถานะไม่สำเร็จ", err);
+      console.error("เปลี่ยนสถานะไม่สำเร็จ", err);
       alert("เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่");
+    }
+  };
+
+  const confirmCompleteOrder = async () => {
+    if (!selectedOrderId) return;
+    setShowConfirmModal(false);
+    try {
+      await axios.put(
+        `${API_URL_ORDER}/${selectedOrderId}/status`,
+        { status: "completed" },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      toast.success("เปลี่ยนสถานะเป็นเสร็จสิ้นเรียบร้อยแล้ว!");
+    } catch (err) {
+      console.error("เปลี่ยนสถานะไม่สำเร็จ", err);
+      toast.error("เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่");
     }
   };
 
@@ -350,10 +359,9 @@ useEffect(() => {
               <div>
                 <p className="text-gray-600 text-sm">ยอดขายวันนี้</p>
                 <p className="text-lg font-bold text-green-600">
-                  {/* {formatPrice(revenueData.totalRevenue)} */}
-                     {revenueData?.totalRevenue !== undefined
-          ? revenueData.totalRevenue.toLocaleString()
-          : "กำลังโหลด..."}
+                  {revenueData?.totalRevenue !== undefined
+                    ? revenueData.totalRevenue.toLocaleString()
+                    : "กำลังโหลด..."}
                 </p>
               </div>
               <DollarSign className="w-8 h-8 text-green-500" />
@@ -436,7 +444,6 @@ useEffect(() => {
                   <th className="px-6 py-4 text-white font-semibold text-center">
                     ยอดรวม
                   </th>
-                  
                   <th className="px-6 py-4 text-white font-semibold text-center">
                     จัดการ
                   </th>
@@ -558,14 +565,7 @@ useEffect(() => {
                       {selectedOrder.table_number}
                     </p>
                   </div>
-                  {/* <div>
-                    <p className="text-gray-600 text-sm">จำนวนลูกค้า</p>
-                    <p className="text-xl font-bold text-purple-600">
-                      {selectedOrder.customer_count} คน
-                    </p>
-                  </div> */}
-                  
-                  <div className="col-span-2">
+                  <div>
                     <p className="text-gray-600 text-sm">เวลาสั่ง</p>
                     <p className="text-lg font-semibold text-gray-800">
                       {formatDateTime(selectedOrder.order_time)}
@@ -599,12 +599,12 @@ useEffect(() => {
                           รายละเอียดเพิ่มเติม: {item.note}
                         </p>
                       </div>
-                     <div className="text-right">
+                      <div className="text-right">
                         <p className="font-semibold text-green-600">
-                          ราคารวม : {(item.price*item.quantity)} บาท
+                          ราคารวม: {(item.price * item.quantity)} บาท
                         </p>
                         <p className="text-gray-500 text-sm">
-                         ราคาต่อหน่วย : {formatPrice(item.price)} / 1 เมนู
+                          ราคาต่อหน่วย: {formatPrice(item.price)} / 1 เมนู
                         </p>
                       </div>
                     </div>
@@ -637,6 +637,38 @@ useEffect(() => {
           </div>
         )}
 
+        {/* Modal ยืนยันการรับเงิน */}
+        {showConfirmModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-gray-100">
+              <h3 className="text-lg font-bold text-orange-700 mb-4">
+                ยืนยันการรับเงิน
+              </h3>
+              <p className="text-gray-600 mb-2">
+                โปรดยืนยันการรับจำนวนเงินสำหรับคำสั่งซื้อ #{selectedOrderId}
+              </p>
+              <p className="text-2xl font-bold text-green-600 mb-4">
+                ยอดรวม: {formatPrice(orders.find((o) => o.order_id === selectedOrderId)?.total_price)}
+              </p>
+              
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={confirmCompleteOrder}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg"
+                >
+                  ยืนยัน
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* สถิติด้านล่าง */}
         <div className="mt-8 bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -651,9 +683,7 @@ useEffect(() => {
             <div className="text-gray-600">
               <span className="font-medium">ยอดขายรวม:</span>{" "}
               <span className="text-green-600 font-bold">
-                {/* {formatPrice(revenueData.totalRevenue)} */}
-                 {/* {revenueData.totalRevenue.toLocaleString()} */}
-                 
+                {formatPrice(stats.totalRevenue)}
               </span>
             </div>
           </div>

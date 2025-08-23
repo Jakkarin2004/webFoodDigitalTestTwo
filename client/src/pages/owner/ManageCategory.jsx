@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Plus, Edit, Trash2, Save, X, Search, Filter } from "lucide-react";
-//เอาไว้ทำ modal
+import { Plus, Edit, Trash2, Save, X, Search } from "lucide-react";
 import toast from "react-hot-toast";
 
-const API_URL = "http://localhost:3000/api/owner/menu-types"; // เปลี่ยนเป็น URL จริงของ API
+const API_URL = "http://localhost:3000/api/owner/menu-types";
 
 const ManageCategory = () => {
   const [categories, setCategories] = useState([]);
@@ -17,11 +16,8 @@ const ManageCategory = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
-
-  //modal delete
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-  // โหลดข้อมูลจาก API
   useEffect(() => {
     fetchCategories();
   }, []);
@@ -29,9 +25,10 @@ const ManageCategory = () => {
   const fetchCategories = async () => {
     try {
       const response = await axios.get(API_URL);
-      setCategories(response.data);
+      setCategories(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error("เกิดข้อผิดพลาดในการโหลดหมวดหมู่:", error);
+      toast.error("ไม่สามารถโหลดหมวดหมู่ได้");
     }
   };
 
@@ -42,36 +39,58 @@ const ManageCategory = () => {
   };
 
   const handleAdd = async () => {
-    if (!formData.type_name.trim()) return;
+    if (!formData.type_name.trim()) {
+      toast.error("กรุณากรอกชื่อหมวดหมู่");
+      return;
+    }
 
     try {
-      await axios.post(API_URL, { type_name: formData.type_name });
+      await axios.post(API_URL, { type_name: formData.type_name.trim() });
       toast.success("เพิ่มหมวดหมู่สำเร็จ!");
-      setFormData({ type_name: "" });
-      fetchCategories(); // โหลดข้อมูลใหม่หลังเพิ่ม
+      resetForm();
+      fetchCategories();
     } catch (error) {
-      console.error(
-        "❌ เพิ่มหมวดหมู่ล้มเหลว:",
-        error.response?.data || error.message
-      );
-      toast.error(
-        error.response?.data?.error || "เกิดข้อผิดพลาดในการเพิ่มหมวดหมู่"
-      );
+      console.error("เพิ่มหมวดหมู่ล้มเหลว:", error.response?.data || error.message);
+      toast.error(error.response?.data?.error || "เกิดข้อผิดพลาดในการเพิ่มหมวดหมู่");
     }
+  };
+
+  const handleUpdate = async () => {
+    if (!formData.type_name.trim()) {
+      toast.error("กรุณากรอกชื่อหมวดหมู่");
+      return;
+    }
+
+    try {
+      await axios.put(`${API_URL}/${editingId}`, { type_name: formData.type_name.trim() });
+      toast.success("แก้ไขหมวดหมู่สำเร็จ!");
+      resetForm();
+      fetchCategories();
+    } catch (error) {
+      console.error("แก้ไขหมวดหมู่ล้มเหลว:", error.response?.data || error.message);
+      toast.error(error.response?.data?.error || "เกิดข้อผิดพลาดในการแก้ไขหมวดหมู่");
+    }
+  };
+
+  const handleEdit = (category) => {
+    setFormData({
+      menu_type_id: category.menu_type_id,
+      type_name: category.type_name,
+    });
+    setEditingId(category.menu_type_id);
+    setIsFormOpen(true);
   };
 
   const handleDelete = async (id) => {
     try {
       await axios.delete(`${API_URL}/${id}`);
-      toast.success("ลบข้อมูลสำเร็จ!");
-      fetchCategories(); // โหลดข้อมูลใหม่หลังลบ
+      toast.success("ลบหมวดหมู่สำเร็จ!");
+      fetchCategories();
     } catch (error) {
-      console.error(
-        "❌ ลบข้อมูลล้มเหลว:",
-        error.response?.data || error.message
-      );
-      toast.error(error.response?.data?.error || "เกิดข้อผิดพลาดในการลบข้อมูล");
+      console.error("ลบหมวดหมู่ล้มเหลว:", error.response?.data || error.message);
+      toast.error(error.response?.data?.error || "เกิดข้อผิดพลาดในการลบหมวดหมู่");
     }
+    setConfirmDeleteId(null);
   };
 
   const filteredAndSortedCategories = categories
@@ -104,7 +123,7 @@ const ManageCategory = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-4">
       <div className="max-w-8xl mx-auto">
-        {/* Header with gradient and shadow */}
+        {/* Header */}
         <div className="bg-white rounded-2xl shadow-xl mb-8 p-8 border border-orange-100">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -116,7 +135,10 @@ const ManageCategory = () => {
               </p>
             </div>
             <button
-              onClick={() => setIsFormOpen(true)}
+              onClick={() => {
+                resetForm();
+                setIsFormOpen(true);
+              }}
               className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-6 py-3 rounded-xl hover:from-orange-600 hover:to-amber-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2 font-medium"
             >
               <Plus className="w-5 h-5" />
@@ -125,15 +147,15 @@ const ManageCategory = () => {
           </div>
         </div>
 
-        {/* Enhanced Modal */}
+        {/* Modal */}
         {isFormOpen && (
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => resetForm()} // 🟠 คลิกที่พื้นหลัง = ปิด
+            onClick={resetForm}
           >
             <div
               className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl border border-gray-100 transform animate-in zoom-in-95 duration-200"
-              onClick={(e) => e.stopPropagation()} // 🛑 ป้องกันคลิกทะลุ Modal
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">
@@ -160,15 +182,16 @@ const ManageCategory = () => {
                   placeholder="กรอกชื่อหมวดหมู่อาหาร..."
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all duration-200"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter")
+                    if (e.key === "Enter") {
                       editingId ? handleUpdate() : handleAdd();
+                    }
                   }}
                 />
               </div>
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => (editingId ? handleUpdate() : handleAdd())}
+                  onClick={editingId ? handleUpdate : handleAdd}
                   disabled={!formData.type_name.trim()}
                   className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 text-white py-3 rounded-xl hover:from-orange-600 hover:to-amber-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 font-medium"
                 >
@@ -186,7 +209,7 @@ const ManageCategory = () => {
           </div>
         )}
 
-        {/* Enhanced Table */}
+        {/* Table */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -201,7 +224,6 @@ const ManageCategory = () => {
                   <th className="px-6 py-4 text-white font-semibold text-center">
                     สร้างเมื่อ
                   </th>
-                  
                   <th className="px-6 py-4 text-white font-semibold text-center">
                     จัดการ
                   </th>
@@ -226,9 +248,15 @@ const ManageCategory = () => {
                         {formatDate(cat.created_at)}
                       </div>
                     </td>
-                   
                     <td className="px-6 py-4 text-center">
                       <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handleEdit(cat)}
+                          className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-all duration-200 transform hover:scale-110"
+                          title="แก้ไข"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setConfirmDeleteId(cat.menu_type_id)}
                           className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-all duration-200 transform hover:scale-110"
@@ -242,7 +270,7 @@ const ManageCategory = () => {
                 ))}
                 {filteredAndSortedCategories.length === 0 && (
                   <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center">
+                    <td colSpan="4" className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                           <Search className="w-8 h-8 text-gray-400" />
@@ -275,37 +303,38 @@ const ManageCategory = () => {
             </div>
           </div>
         </div>
-      </div>
-      {confirmDeleteId && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">
-              ยืนยันการลบ
-            </h2>
-            <p className="text-gray-600 mb-6">
-              คุณแน่ใจหรือไม่ว่าต้องการลบหมวดหมู่นี้?
-              การกระทำนี้ไม่สามารถย้อนกลับได้
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-              >
-                ยกเลิก
-              </button>
-              <button
-                onClick={async () => {
-                  await handleDelete(confirmDeleteId);
-                  setConfirmDeleteId(null);
-                }}
-                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 shadow-md"
-              >
-                ยืนยันลบ
-              </button>
+
+        {/* Delete Modal */}
+        {confirmDeleteId && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                ยืนยันการลบ
+              </h2>
+              <p className="text-gray-600 mb-6">
+                คุณแน่ใจหรือไม่ว่าต้องการลบหมวดหมู่นี้?
+                การกระทำนี้ไม่สามารถย้อนกลับได้
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmDeleteId(null)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={async () => {
+                    await handleDelete(confirmDeleteId);
+                  }}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 shadow-md"
+                >
+                  ยืนยันลบ
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

@@ -19,6 +19,7 @@ import ManageOrders from './pages/owner/ManageOrders';
 import OrderHistory from './pages/owner/OrderHistory';
 import StoreManagement from './pages/owner/StoreManagement';
 import UserProfileManagement from './pages/owner/UserProfileManagement';
+import ManageSale from './pages/owner/ManageSale';
 
 // Staff Pages
 import StaffProfileManagement from './pages/staff/StaffProfileManagement'
@@ -38,6 +39,7 @@ import Login from './pages/auth/Login';
 // Others
 import ScrollToTop from "./ScrollToTop";
 import Error404Page from './components/Error404Page';
+
 
 function App() {
   const isHydrated = useAuthStore((state) => state._hasHydrated);
@@ -67,6 +69,7 @@ function App() {
           <Route path="ManageStaff" element={<ManageStaff />} />
           <Route path="table" element={<ManageTable />} />
           <Route path="orders" element={<ManageOrders />} />
+          <Route path="order-sale" element={<ManageSale />} />
           <Route path="order-history" element={<OrderHistory />} />
           <Route path="profile" element={<UserProfileManagement />} />
         </Route>

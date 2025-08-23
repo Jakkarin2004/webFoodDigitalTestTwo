@@ -3,6 +3,8 @@ import { User, Lock, Eye, EyeOff, LogIn } from "lucide-react";
 import useAuthStore from "../../stores/authStore";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+//เอาไว้ทำ modal
+import toast from "react-hot-toast";
 
 const Login = () => {
   const [formData, setFormData] = useState({ username: "", password: "" });
@@ -59,13 +61,13 @@ const Login = () => {
 
       login(user, token); // ✅ เรียกฟังก์ชัน login ได้ตรง ๆ
 
-      alert("เข้าสู่ระบบสำเร็จ!");
+      toast.success("เข้าสู่ระบบสำเร็จ!");
       setFormData({ username: "", password: "" });
     } catch (err) {
       const message =
         err.response?.data?.message || err.message || "Login failed";
       setError(message);
-      alert("เกิดข้อผิดพลาด: " + message);
+      toast.error("เกิดข้อผิดพลาด " + message);
     } finally {
       setLoading(false);
     }

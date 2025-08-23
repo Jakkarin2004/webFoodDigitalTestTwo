@@ -83,6 +83,9 @@ app.use("/api/owner/orders", manageOrders);
 const orderHistory = require('./routes/owner/orderHistory');
 app.use("/api/owner/order-history", orderHistory);
 
+const manageSale = require('./routes/owner/manageSale');
+app.use("/api/owner/order-sale", manageSale);
+
 const store = require('./routes/owner/store');
 app.use("/api/owner/store", store);
 

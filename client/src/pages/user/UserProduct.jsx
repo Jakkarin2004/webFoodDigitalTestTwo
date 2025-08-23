@@ -275,8 +275,8 @@ const UserProduct = () => {
                             {item.name}
                           </h3>
                           <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div className="text-gray-500">รหัสเมนู:</div>
-                            <div>{item.id}</div>
+                            {/* <div className="text-gray-500">รหัสเมนู:</div>
+                            <div>{item.id}</div> */}
                             {/* <div className="text-gray-500">รหัสตะกร้า:</div>
                             <div>{item.cartItemId}</div> */}
                             <div className="text-gray-500">

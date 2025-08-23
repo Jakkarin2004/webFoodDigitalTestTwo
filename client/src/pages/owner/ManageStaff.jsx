@@ -15,10 +15,9 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import useAuthStore from "../../stores/authStore";
-//เอาไว้ทำ modal
 import toast from "react-hot-toast";
 
-const API_URL_STAFF = "http://localhost:3000/api/owner/staff"; // URL ของ API
+const API_URL_STAFF = "http://localhost:3000/api/owner/staff";
 
 const ManageStaff = () => {
   const [staff, setStaff] = useState([]);
@@ -40,10 +39,8 @@ const ManageStaff = () => {
   const [filterRole, setFilterRole] = useState("all");
   const { token } = useAuthStore();
 
-  //ยืนยันลบ
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-  // โหลดข้อมูลจาก API
   useEffect(() => {
     fetchStaff();
   }, [token]);
@@ -51,7 +48,7 @@ const ManageStaff = () => {
   const fetchStaff = async () => {
     try {
       if (!token) {
-        console.log("❗ ไม่มี token");
+        console.log("ไม่มี token");
         return;
       }
 
@@ -69,7 +66,7 @@ const ManageStaff = () => {
         toast("Session หมดอายุ กรุณาเข้าสู่ระบบใหม่", {
           duration: 6000,
         });
-        logout(); // หรือ navigate("/login")
+        // logout(); // หรือ navigate("/login")
       }
     }
   };
@@ -101,6 +98,12 @@ const ManageStaff = () => {
       return;
     }
 
+    // ตรวจสอบว่าเบอร์โทรศัพท์เป็น 10 ตัว
+    if (formData.phone_number.length !== 10) {
+      toast.error("กรุณากรอกเบอร์โทรศัพท์ 10 ตัวเท่านั้น");
+      return;
+    }
+
     const staffData = { ...formData, role: "staff" };
 
     try {
@@ -115,7 +118,7 @@ const ManageStaff = () => {
       fetchStaff();
     } catch (error) {
       console.error(
-        "❌ เพิ่มพนักงานล้มเหลว:",
+        "เพิ่มพนักงานล้มเหลว:",
         error.response?.data || error.message
       );
       toast.error(
@@ -149,7 +152,12 @@ const ManageStaff = () => {
       return;
     }
 
-    // เตรียมข้อมูลส่งไป (role บังคับเป็น staff)
+    // ตรวจสอบว่าเบอร์โทรศัพท์เป็น 10 ตัว
+    if (formData.phone_number.length !== 10) {
+      toast.error("กรุณากรอกเบอร์โทรศัพท์ 10 ตัวเท่านั้น");
+      return;
+    }
+
     const updatedData = {
       first_name: formData.first_name,
       last_name: formData.last_name,
@@ -158,7 +166,6 @@ const ManageStaff = () => {
       role: "staff",
     };
 
-    // ถ้ามีการกรอกรหัสผ่านใหม่ จะส่งไปด้วย
     if (formData.password.trim()) {
       updatedData.password = formData.password;
     }
@@ -175,7 +182,7 @@ const ManageStaff = () => {
       fetchStaff();
     } catch (error) {
       console.error(
-        "❌ แก้ไขข้อมูลพนักงานล้มเหลว:",
+        "แก้ไขข้อมูลพนักงานล้มเหลว:",
         error.response?.data || error.message
       );
       toast.error(
@@ -216,7 +223,6 @@ const ManageStaff = () => {
   const formatDateThai = (dateString) => {
     if (!dateString) return "-";
     try {
-      // แปลงเป็น Date และเพิ่ม 7 ชั่วโมง (timezone offset)
       const utcDate = new Date(dateString.replace(" ", "T"));
       const bangkokOffset = 7 * 60 * 60 * 1000;
       const localDate = new Date(utcDate.getTime() + bangkokOffset);
@@ -234,27 +240,26 @@ const ManageStaff = () => {
   };
 
   const confirmDelete = async () => {
-  try {
-    await axios.delete(`${API_URL_STAFF}/${confirmDeleteId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    try {
+      await axios.delete(`${API_URL_STAFF}/${confirmDeleteId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    toast.success("ลบพนักงานสำเร็จ!");
-    setConfirmDeleteId(null); // ปิด modal
-    fetchStaff(); // โหลดข้อมูลใหม่
-  } catch (error) {
-    console.error(
-      "❌ ลบพนักงานล้มเหลว:",
-      error.response?.data || error.message
-    );
-    toast.error(
-      error.response?.data?.error || "เกิดข้อผิดพลาดในการลบพนักงาน"
-    );
-  }
-};
-
+      toast.success("ลบพนักงานสำเร็จ!");
+      setConfirmDeleteId(null);
+      fetchStaff();
+    } catch (error) {
+      console.error(
+        "ลบพนักงานล้มเหลว:",
+        error.response?.data || error.message
+      );
+      toast.error(
+        error.response?.data?.error || "เกิดข้อผิดพลาดในการลบพนักงาน"
+      );
+    }
+  };
 
   const getRoleBadge = (role) => {
     if (role === "owner") {
@@ -276,7 +281,6 @@ const ManageStaff = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-4">
       <div className="max-w-8xl mx-auto">
-        {/* Header */}
         <div className="bg-white rounded-2xl shadow-xl mb-8 p-8 border border-orange-100">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -297,15 +301,14 @@ const ManageStaff = () => {
           </div>
         </div>
 
-        {/* Modal */}
         {isFormOpen && (
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => resetForm()} // 🟠 คลิกที่พื้นหลัง = ปิด
+            onClick={() => resetForm()}
           >
             <div
               className="bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl border border-gray-100 transform animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()} // 🛑 ป้องกันคลิกทะลุ Modal
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">
@@ -408,19 +411,22 @@ const ManageStaff = () => {
                     <input
                       type="tel"
                       value={formData.phone_number}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          phone_number: e.target.value,
-                        })
-                      }
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9]/g, ""); // อนุญาตเฉพาะตัวเลข
+                        if (value.length <= 10) {
+                          setFormData({
+                            ...formData,
+                            phone_number: value,
+                          });
+                        }
+                      }}
                       placeholder="08X-XXX-XXXX"
                       className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all duration-200"
+                      maxLength={10} // จำกัดการป้อนสูงสุด 10 ตัวใน HTML
                     />
                   </div>
                 </div>
 
-                {/* แสดงข้อความแจ้งเตือนเมื่อเพิ่มใหม่ */}
                 {!editingId && (
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                     <div className="flex items-center gap-2">
@@ -452,7 +458,6 @@ const ManageStaff = () => {
           </div>
         )}
 
-        {/* Table */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -470,9 +475,6 @@ const ManageStaff = () => {
                   <th className="px-6 py-4 text-white font-semibold text-center">
                     เบอร์โทร
                   </th>
-                  {/* <th className="px-6 py-4 text-white font-semibold text-center">
-                    ตำแหน่ง
-                  </th> */}
                   <th className="px-6 py-4 text-white font-semibold text-center">
                     สร้างเมื่อ
                   </th>
@@ -508,9 +510,6 @@ const ManageStaff = () => {
                         {staffMember.phone_number}
                       </div>
                     </td>
-                    {/* <td className="px-6 py-4 text-center">
-                      {getRoleBadge(staffMember.role)}
-                    </td> */}
                     <td className="px-6 py-4 text-center text-gray-600">
                       <div className="bg-gray-100 rounded-lg px-3 py-1 text-sm inline-block">
                         {formatDateThai(staffMember.created_at)}
@@ -564,7 +563,6 @@ const ManageStaff = () => {
           </div>
         </div>
 
-        {/* Stats Footer */}
         <div className="mt-8 bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center">
@@ -573,18 +571,6 @@ const ManageStaff = () => {
               </div>
               <div className="text-gray-600 text-sm">พนักงานทั้งหมด</div>
             </div>
-            {/* <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">
-                {staff.filter(s => s.role === 'owner').length}
-              </div>
-              <div className="text-gray-600 text-sm">เจ้าของ</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">
-                {staff.filter(s => s.role === 'staff').length}
-              </div>
-              <div className="text-gray-600 text-sm">พนักงาน</div>
-            </div> */}
           </div>
         </div>
       </div>

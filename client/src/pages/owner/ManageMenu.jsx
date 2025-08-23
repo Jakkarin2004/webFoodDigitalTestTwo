@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, Save, X, Upload, Star } from "lucide-react";
+import { Plus, Edit2, Trash2, Save, X, Upload } from "lucide-react";
 import axios from "axios";
-//เอาไว้ทำ modal
 import toast from "react-hot-toast";
 
-const API_URL = "http://localhost:3000/api/owner/menu"; // เปลี่ยนเป็น URL จริงของ API
-const API_URL_MENU_TYPE = "http://localhost:3000/api/owner/menu/menu_type"; // เปลี่ยนเป็น URL จริงของ API
-const API_URL_IMAGE = "http://localhost:3000/uploads/food"; // เปลี่ยนเป็น URL จริงของ API
+const API_URL = "http://localhost:3000/api/owner/menu";
+const API_URL_MENU_TYPE = "http://localhost:3000/api/owner/menu/menu_type";
+const API_URL_IMAGE = "http://localhost:3000/uploads/food";
 
 const ManageMenu = () => {
   const [menus, setMenus] = useState([]);
-  const [menusType, setMenusType] = useState("");
+  const [menusType, setMenusType] = useState([]); // แก้จาก "" เป็น []
   const [showForm, setShowForm] = useState(false);
   const [editingMenu, setEditingMenu] = useState(null);
-
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [menuToDelete, setMenuToDelete] = useState(null);
+
+  const [formData, setFormData] = useState({
+    menu_name: "",
+    menu_image: "",
+    price: "",
+    special: false,
+    detail_menu: "",
+    menu_type_id: "", // ค่าเริ่มต้นเป็น ""
+  });
 
   useEffect(() => {
     fetchMenu();
@@ -25,32 +32,24 @@ const ManageMenu = () => {
   const fetchMenu = async () => {
     try {
       const response = await axios.get(API_URL);
-      // สมมติ API คืนข้อมูลแบบ { menus: [...] } หรือ [...direct array]
-      const menusData = response.data.menus || response.data || [];
+      const menusData = Array.isArray(response.data) ? response.data : response.data.menus || [];
       setMenus(menusData);
     } catch (error) {
       console.error("❌ เกิดข้อผิดพลาดในการโหลดเมนู:", error);
+      toast.error("ไม่สามารถโหลดเมนูได้");
     }
   };
 
   const fetchMenuType = async () => {
     try {
       const response = await axios.get(API_URL_MENU_TYPE);
-      // console.log(response.data); // เช็คข้อมูลที่ได้
-      setMenusType(response.data.menus || response.data || []); // ปรับตามโครงสร้าง API จริง
+      const menuTypesData = Array.isArray(response.data) ? response.data : response.data.menus || [];
+      setMenusType(menuTypesData);
     } catch (error) {
-      console.error("เกิดข้อผิดพลาดในการโหลดหมวดหมู่:", error);
+      console.error("❌ เกิดข้อผิดพลาดในการโหลดหมวดหมู่:", error);
+      toast.error("ไม่สามารถโหลดประเภทเมนูได้");
     }
   };
-
-  const [formData, setFormData] = useState({
-    menu_name: "",
-    menu_image: "",
-    price: "",
-    special: false,
-    detail_menu: "",
-    menu_type_id: "", // ตั้งค่าเริ่มต้นเป็นค่าว่างไปก่อน
-  });
 
   const resetForm = () => {
     setFormData({
@@ -59,37 +58,29 @@ const ManageMenu = () => {
       price: "",
       special: false,
       detail_menu: "",
-      menu_type_id: 1,
+      menu_type_id: "", // แก้จาก 1 เป็น ""
     });
     setEditingMenu(null);
     setShowForm(false);
   };
+
   const handleSubmit = async () => {
-    // ตรวจสอบว่าใส่ชื่อเมนูและราคาหรือยัง
     if (!formData.menu_name || !formData.price) {
-      toast("กรุณากรอกชื่อเมนูและราคา", {
-        duration: 3000,
-      });
+      toast.error("กรุณากรอกชื่อเมนูและราคา");
       return;
     }
 
-    // ตรวจสอบและแปลง menu_type_id
     if (!formData.menu_type_id) {
-      toast("กรุณาเลือกประเภทเมนู", {
-        duration: 3000,
-      });
+      toast.error("กรุณาเลือกประเภทเมนู");
       return;
     }
 
     const menuTypeId = parseInt(formData.menu_type_id, 10);
     if (isNaN(menuTypeId)) {
-      toast("กรุณาเลือกประเภทเมนู", {
-        duration: 3000,
-      });
+      toast.error("กรุณาเลือกประเภทเมนูที่ถูกต้อง");
       return;
     }
 
-    // สำหรับ UPDATE ต้องใช้ FormData เสมอ เพราะต้องส่งไฟล์ (หรือ oldImage)
     const form = new FormData();
     form.append("menu_name", formData.menu_name.trim());
     form.append("price", parseFloat(formData.price).toString());
@@ -97,67 +88,43 @@ const ManageMenu = () => {
     form.append("detail_menu", formData.detail_menu?.trim() || "ไม่มีรายละเอียด");
     form.append("menu_type_id", menuTypeId.toString());
 
-    // ถ้ามีไฟล์ใหม่
     if (formData.menu_image_file instanceof File) {
       form.append("menu_image", formData.menu_image_file);
     }
 
-    // ถ้าเป็นการแก้ไข ส่ง oldImage ด้วย
     if (editingMenu && editingMenu.menu_image) {
       form.append("oldImage", editingMenu.menu_image);
     }
 
-    // Debug ตรวจสอบข้อมูลที่กำลังส่ง
-    console.log("=== Debug Form Data ===");
-    for (let pair of form.entries()) {
-      console.log(`${pair[0]}:`, pair[1], typeof pair[1]);
-    }
-
     try {
       if (editingMenu) {
-        // สำหรับ UPDATE - ใช้ PUT method
-        await axios.put(
-          `http://localhost:3000/api/owner/menu/${editingMenu.menu_id}`,
-          form,
-          {
-            headers: { "Content-Type": "multipart/form-data" },
-          }
-        );
+        await axios.put(`${API_URL}/${editingMenu.menu_id}`, form, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
         toast.success("แก้ไขเมนูสำเร็จ!");
       } else {
-        // สำหรับ CREATE - ใช้ POST method
-        await axios.post("http://localhost:3000/api/owner/menu", form, {
+        await axios.post(API_URL, form, {
           headers: { "Content-Type": "multipart/form-data" },
         });
         toast.success("เพิ่มเมนูสำเร็จ!");
       }
-
-      fetchMenu(); // โหลดเมนูใหม่
-      resetForm(); // เคลียร์ฟอร์ม
+      fetchMenu();
+      resetForm();
     } catch (error) {
-      console.error(
-        "❌ เกิดข้อผิดพลาดในการบันทึกเมนู:",
-        error?.response?.data || error.message
-      );
-
-      // แสดง error message ที่ชัดเจนขึ้น
-      const errorMessage =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        "เกิดข้อผิดพลาดในการบันทึกเมนู";
-      toast.error(errorMessage);
+      console.error("❌ เกิดข้อผิดพลาดในการบันทึกเมนู:", error.response?.data || error.message);
+      toast.error(error.response?.data?.error || "เกิดข้อผิดพลาดในการบันทึกเมนู");
     }
   };
 
   const handleEdit = (menu) => {
     setFormData({
       menu_name: menu.menu_name,
-      menu_image: menu.menu_image, // ชื่อไฟล์รูปเก่า
-      menu_image_file: menu.menu_image, // ยังไม่มีรูปใหม่
+      menu_image: menu.menu_image,
+      menu_image_file: menu.menu_image,
       price: menu.price.toString(),
-      special: menu.special, // true ถ้าเป็น 1 (พร้อมเสิร์ฟ), false ถ้าเป็น 0
-      detail_menu: menu.detail_menu,
-      menu_type_id: menu.menu_type_id.toString(), // แปลงเป็น string
+      special: menu.special === 1,
+      detail_menu: menu.detail_menu || "",
+      menu_type_id: menu.menu_type_id.toString(),
     });
     setEditingMenu(menu);
     setShowForm(true);
@@ -165,36 +132,28 @@ const ManageMenu = () => {
 
   const handleDelete = async (menuId) => {
     try {
-      const response = await fetch(
-        `http://localhost:3000/api/owner/menu/${menuId}`,
-        {
-          method: "DELETE",
-        }
-      );
-
-      if (!response.ok) throw new Error("ลบเมนูล้มเหลว");
-
+      await axios.delete(`${API_URL}/${menuId}`);
       setMenus(menus.filter((menu) => menu.menu_id !== menuId));
       toast.success("ลบเมนูสำเร็จ!");
     } catch (error) {
-      toast.error("เกิดข้อผิดพลาดในการลบเมนู: " + error.message);
+      console.error("❌ เกิดข้อผิดพลาดในการลบเมนู:", error);
+      toast.error(error.response?.data?.error || "เกิดข้อผิดพลาดในการลบเมนู");
     }
+    setShowDeleteModal(false);
   };
 
-  // ฟังก์ชัน handleFileChange ต้องประกาศที่นี่
   const handleFileChange = (e) => {
     if (e.target.files.length > 0) {
       setFormData((prev) => ({
         ...prev,
-        menu_image_file: e.target.files[0], // เก็บไฟล์ไว้ใน formData
+        menu_image_file: e.target.files[0],
       }));
-      console.log("เลือกไฟล์:", e.target.files[0]);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100 p-4">
-      <div className="max-w-9xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-2xl shadow-xl mb-6 p-6 border-l-4 border-orange-500">
           <div className="flex justify-between items-center">
@@ -218,16 +177,16 @@ const ManageMenu = () => {
         {showForm && (
           <div
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            onClick={() => resetForm()} // 🟠 คลิกที่พื้นหลัง = ปิด
+            onClick={resetForm}
           >
             <div
               className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()} // 🛑 ป้องกันคลิกทะลุ Modal
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="p-6 border-b border-gray-200">
                 <div className="flex justify-between items-center">
                   <h2 className="text-2xl font-bold text-gray-800">
-                    {/* {editingMenu ? "แก้ไขเมนู" : "เพิ่มเมนูใหม่"} */}
+                    {editingMenu ? "แก้ไขเมนู" : "เพิ่มเมนูใหม่"}
                   </h2>
                   <button
                     onClick={resetForm}
@@ -263,10 +222,16 @@ const ManageMenu = () => {
                     <input
                       type="number"
                       step="0.01"
+                      min="0"
                       value={formData.price}
-                      onChange={(e) =>
-                        setFormData({ ...formData, price: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "" || parseFloat(value) >= 0) {
+                          setFormData({ ...formData, price: value });
+                        } else {
+                          toast.error("ราคาต้องมากกว่าหรือเท่ากับ 0");
+                        }
+                      }}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
                       placeholder="0.00"
                       required
@@ -276,10 +241,10 @@ const ManageMenu = () => {
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    ประเภทเมนู
+                    ประเภทเมนู *
                   </label>
                   <select
-                    value={formData.menu_type_id || ""}
+                    value={formData.menu_type_id === undefined || formData.menu_type_id === null ? "" : formData.menu_type_id}
                     onChange={(e) => {
                       const value = e.target.value;
                       setFormData({
@@ -288,6 +253,7 @@ const ManageMenu = () => {
                       });
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                    required
                   >
                     <option value="" disabled>
                       เลือกประเภทเมนู
@@ -361,14 +327,10 @@ const ManageMenu = () => {
                           special: e.target.value === "1",
                         })
                       }
-                     className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     >
-                      <option value="1" className="text-gray-600">
-                        พร้อมเสิร์ฟ
-                      </option>
-                      <option value="0" className="text-gray-600">
-                        ไม่พร้อมเสิร์ฟ
-                      </option>
+                      <option value="1">พร้อมเสิร์ฟ</option>
+                      <option value="0">ไม่พร้อมเสิร์ฟ</option>
                     </select>
                   </div>
                 </div>
@@ -441,7 +403,6 @@ const ManageMenu = () => {
                           {menu.menu_image ? (
                             <img
                               src={`${API_URL_IMAGE}/${menu.menu_image}`}
-                              // ✅ ลบ /public ออก
                               alt={menu.menu_name}
                               className="w-full h-full object-cover"
                             />
@@ -453,28 +414,20 @@ const ManageMenu = () => {
                             </div>
                           )}
                         </div>
-
-                        <div>
-                          <p className="font-semibold text-gray-800">
-                            {menu.menu_name}
-                          </p>
-                        </div>
+                        <p className="font-semibold text-gray-800">{menu.menu_name}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-gray-600">
-                      {menu.menu_type_name}
+                      {menusType.find((type) => type.menu_type_id === menu.menu_type_id)?.type_name || "ไม่ระบุ"}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-lg font-bold text-orange-600">
                         {typeof menu.price === "number"
                           ? menu.price.toFixed(2)
-                          : !isNaN(parseFloat(menu.price))
-                          ? parseFloat(menu.price).toFixed(2)
-                          : "0.00"}{" "}
+                          : parseFloat(menu.price).toFixed(2)}{" "}
                         ฿
                       </span>
                     </td>
-
                     <td className="px-6 py-4">
                       {menu.special === 1 ? (
                         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-orange-100 to-yellow-100 text-orange-700 border border-orange-200">
@@ -529,38 +482,39 @@ const ManageMenu = () => {
             </div>
           )}
         </div>
-      </div>
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/40  flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
-              ยืนยันการลบเมนู
-            </h2>
-            <p className="text-gray-600 mb-6">
-              คุณแน่ใจหรือไม่ว่าต้องการลบเมนูนี้?
-              การดำเนินการนี้ไม่สามารถย้อนกลับได้
-            </p>
 
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-100"
-              >
-                ยกเลิก
-              </button>
-              <button
-                onClick={async () => {
-                  await handleDelete(menuToDelete);
-                  setShowDeleteModal(false);
-                }}
-                className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold"
-              >
-                ลบเมนู
-              </button>
+        {/* Delete Modal */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">
+                ยืนยันการลบเมนู
+              </h2>
+              <p className="text-gray-600 mb-6">
+                คุณแน่ใจหรือไม่ว่าต้องการลบเมนูนี้?
+                การดำเนินการนี้ไม่สามารถย้อนกลับได้
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-100"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={async () => {
+                    await handleDelete(menuToDelete);
+                    setShowDeleteModal(false);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold"
+                >
+                  ลบเมนู
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

@@ -543,11 +543,7 @@ const handleSave = async () => {
 
                             {/* Timestamps */}
                             <div className="pt-6 border-t border-gray-200">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-500">
-                                    <div>
-                                        <p className="font-semibold">วันที่สร้าง:</p>
-                                        <p>{new Date(storeData.created_at).toLocaleString('th-TH')}</p>
-                                    </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-500">         
                                     <div>
                                         <p className="font-semibold">อัปเดตล่าสุด:</p>
                                         <p>{new Date(storeData.updated_at).toLocaleString('th-TH')}</p>

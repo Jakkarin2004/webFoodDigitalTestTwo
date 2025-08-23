@@ -7,12 +7,9 @@ router.get("/:order_code", async (req, res) => {
   const { order_code } = req.params;
 
   try {
-    //ดึง header จาก temp_receipts
     const [tempBills] = await db
       .promise()
-      .query(`SELECT * FROM temp_receipts WHERE temp_receipt_code = ?`, [
-        order_code,
-      ]);
+      .query(`SELECT * FROM temp_receipts WHERE temp_receipt_code = ?`, [order_code]);
 
     if (!tempBills.length) {
       return res.status(404).json({ message: "ไม่พบบิลนี้" });
@@ -20,7 +17,6 @@ router.get("/:order_code", async (req, res) => {
 
     const tempBill = tempBills[0];
 
-    //ดึง orders ทั้งหมดที่ order_code = temp_receipt_code
     const [orders] = await db
       .promise()
       .query(`SELECT * FROM orders WHERE order_code = ?`, [order_code]);
@@ -29,7 +25,6 @@ router.get("/:order_code", async (req, res) => {
       return res.status(404).json({ message: "ไม่พบคำสั่งซื้อที่เกี่ยวข้อง" });
     }
 
-    //ดึงรายการอาหารของแต่ละ order
     const orderDetails = await Promise.all(
       orders.map(async (order) => {
         const [items] = await db.promise().query(
@@ -70,53 +65,46 @@ router.get("/:order_code", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "เกิดข้อผิดพลาดในการดึงบิล",
+      error: err.message,
     });
   }
 });
 
-//อัปเดตสถานะยกเลิก (เหมือนเดิม)
-router.put("/cancel-order/:order_code", async (req, res) => {
-  const { order_code } = req.params;
+// อัปเดตสถานะยกเลิกสำหรับ order_id เฉพาะ
+router.put("/cancel-order/:order_id", async (req, res) => {
+  const { order_id } = req.params;
   const { status } = req.body;
 
+  console.log(`Attempting to cancel order_id: ${order_id}`);
+
+  if (!order_id || !status) {
+    return res.status(400).json({ message: "กรุณาระบุ order_id และ status" });
+  }
+
   try {
+    // ตรวจสอบและอัปเดตสถานะ
     const [result] = await db
       .promise()
-      .query(`UPDATE orders SET status = ? WHERE order_code = ?`, [
-        status,
-        order_code,
-      ]);
+      .query(`UPDATE orders SET status = ? WHERE order_id = ? AND status = 'pending'`, [status, order_id]);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "ไม่พบคำสั่งซื้อนี้" });
+      return res.status(404).json({ message: `ไม่พบคำสั่งซื้อ #${order_id} หรือไม่สามารถยกเลิกได้ (ไม่ใช่ pending)` });
     }
 
-    //ดึง order_id ทั้งหมดที่เกี่ยวข้อง
-    const [rows] = await db
+    const [order] = await db
       .promise()
-      .query(`SELECT order_id FROM orders WHERE order_code = ?`, [
-        order_code,
-      ]);
-
-    const orderIds = rows.map((r) => r.order_id);
+      .query(`SELECT order_code FROM orders WHERE order_id = ?`, [order_id]);
+    const order_code = order[0].order_code;
 
     const io = req.app.get("io");
     if (io) {
-      const { getTodayCount } = require("../owner/getTodayCount");
-      const count = await getTodayCount();
-
-      //emit สำหรับทุก order_id
-      orderIds.forEach((orderId) => {
-        io.emit("order_status_updated", { orderId, status });
-      });
-
-      io.emit("orderCountUpdated", { count });
+      io.emit("order_status_updated", { orderId: order_id, status, order_code });
     }
 
-    res.json({ message: "ยกเลิกคำสั่งซื้อเรียบร้อยแล้ว" });
+    res.json({ message: `ยกเลิกคำสั่งซื้อ #${order_id} เรียบร้อยแล้ว` });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "ไม่สามารถยกเลิกคำสั่งซื้อได้" });
+    console.error("Error in cancel-order:", err);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในการยกเลิกคำสั่งซื้อ", error: err.message });
   }
 });
 

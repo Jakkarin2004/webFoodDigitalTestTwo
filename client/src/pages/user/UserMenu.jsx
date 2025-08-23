@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from "uuid";
 import { Star, Clock, Users, X } from "lucide-react";
 import axios from "axios";
 import { useParams, useNavigate } from "react-router-dom";
-//เอาไว้ทำ modal
 import toast from "react-hot-toast";
 
 import Navbar from "../../components/user/Navbar";
@@ -90,9 +89,14 @@ const UserMenu = () => {
   }, []);
 
   // เพิ่มเมนูลงตะกร้า
-  const handleAddToOrder = (menu_id, menu_name, menu_image, price) => {
+  const handleAddToOrder = (menu_id, menu_name, menu_image, price, special) => {
+    if (special === 0) {
+      toast.error("เมนูนี้ไม่พร้อมเสิร์ฟ");
+      return;
+    }
+
     const tableNumber = sessionStorage.getItem("table_number");
-    if (!tableNumber) return alert("กรุณาสแกน QR Code ใหม่");
+    if (!tableNumber) return toast.error("กรุณาสแกน QR Code ใหม่");
 
     let existingCart = JSON.parse(sessionStorage.getItem("cart")) || {
       table_number: tableNumber,
@@ -109,9 +113,9 @@ const UserMenu = () => {
     }
 
     const note = noteByMenu[menu_id] || "ไม่มี";
-    const special = specialRequestByMenu[menu_id] || "ธรรมดา";
+    const specialRequest = specialRequestByMenu[menu_id] || "ธรรมดา";
     const finalPrice =
-      special === "พิเศษ" ? parseFloat(price) + 10 : parseFloat(price);
+      specialRequest === "พิเศษ" ? parseFloat(price) + 10 : parseFloat(price);
 
     const newItem = {
       cartItemId: uuidv4(),
@@ -120,7 +124,7 @@ const UserMenu = () => {
       image: menu_image,
       price: finalPrice,
       note,
-      specialRequest: special,
+      specialRequest,
       quantity: 1,
     };
 
@@ -133,7 +137,6 @@ const UserMenu = () => {
       })
     );
 
-    // เพิ่ม event เพื่อแจ้ง Navbar ว่ามีการเปลี่ยนแปลง
     window.dispatchEvent(new Event("cartUpdated"));
     toast.success("เพิ่มเมนูลงตะกร้าเรียบร้อย");
   };
@@ -143,7 +146,7 @@ const UserMenu = () => {
       <Navbar tableNumber={table_number} />
 
       {/* Hero Slider */}
-      <div className="pt-16 relative ">
+      <div className="pt-16 relative">
         <div className="relative h-96 overflow-hidden">
           {slides.map((slide, index) => (
             <div
@@ -187,7 +190,7 @@ const UserMenu = () => {
       </div>
 
       {/* Netflix-style Category Sections */}
-      <div className="max-w-7xl mx-auto px-4 py-8 ">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">
           เมนูอาหารทั้งหมด
         </h2>
@@ -213,8 +216,13 @@ const UserMenu = () => {
                   {filtered.map((product) => (
                     <div
                       key={product.menu_id}
-                      className="min-w-[250px] bg-white rounded-xl shadow hover:shadow-xl transition-all cursor-pointer"
+                      className={`min-w-[250px] bg-white rounded-xl shadow hover:shadow-xl transition-all ${
+                        product.special === 0
+                          ? "border-2 border-red-500"
+                          : "cursor-pointer"
+                      }`}
                       onClick={() => {
+                        if (product.special === 0) return; // ป้องกันการคลิกถ้าไม่พร้อมเสิร์ฟ
                         setSelectedFood(product);
                         setNoteByMenu((prev) => ({
                           ...prev,
@@ -234,6 +242,11 @@ const UserMenu = () => {
                       <div className="p-4">
                         <h4 className="font-bold text-lg">
                           {product.menu_name}
+                          {product.special === 0 && (
+                            <span className="text-red-500 text-sm ml-2">
+                              (ไม่พร้อมเสิร์ฟ)
+                            </span>
+                          )}
                         </h4>
                         <p className="text-orange-500 font-semibold">
                           ฿{parseFloat(product.price).toFixed(2)}
@@ -252,11 +265,11 @@ const UserMenu = () => {
       {selectedFood && (
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
-          onClick={() => setSelectedFood(null)} //คลิกพื้นหลัง = ปิด
+          onClick={() => setSelectedFood(null)}
         >
           <div
             className="bg-white rounded-xl max-w-2xl w-full max-h-screen overflow-y-auto"
-            onClick={(e) => e.stopPropagation()} //ป้องกันคลิกใน modal ไม่ให้ปิด
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="relative">
               <img
@@ -275,6 +288,11 @@ const UserMenu = () => {
             <div className="p-6">
               <h2 className="text-3xl font-bold text-gray-800 mb-4">
                 {selectedFood.menu_name}
+                {selectedFood.special === 0 && (
+                  <span className="text-red-500 text-lg ml-2">
+                    (ไม่พร้อมเสิร์ฟ)
+                  </span>
+                )}
               </h2>
 
               <div className="flex items-center justify-between mb-4">
@@ -299,59 +317,66 @@ const UserMenu = () => {
               <h3 className="text-xl font-semibold mb-2">รายละเอียดเมนู</h3>
               <p className="text-gray-700 mb-4">{selectedFood.detail_menu}</p>
 
-              <h3 className="text-xl font-semibold mb-2">เลือกระดับ</h3>
-              <div className="flex space-x-4 mb-4">
-                {options.map((option) => (
-                  <button
-                    key={option}
-                    onClick={() =>
-                      setSpecialRequestByMenu((prev) => ({
+              {selectedFood.special === 1 && (
+                <>
+                  <h3 className="text-xl font-semibold mb-2">เลือกระดับ</h3>
+                  <div className="flex space-x-4 mb-4">
+                    {options.map((option) => (
+                      <button
+                        key={option}
+                        onClick={() =>
+                          setSpecialRequestByMenu((prev) => ({
+                            ...prev,
+                            [selectedFood.menu_id]: option,
+                          }))
+                        }
+                        className={`px-4 py-2 rounded-full border ${
+                          specialRequestByMenu[selectedFood.menu_id] === option
+                            ? "bg-orange-500 text-white border-orange-500"
+                            : "bg-white text-gray-800 border-gray-300"
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+
+                  <h3 className="text-xl font-semibold mb-2">
+                    รายละเอียดเพิ่มเติม
+                  </h3>
+                  <input
+                    className="w-full p-2 border border-gray-500 rounded mb-6"
+                    type="text"
+                    value={noteByMenu[selectedFood.menu_id] || ""}
+                    onChange={(e) =>
+                      setNoteByMenu((prev) => ({
                         ...prev,
-                        [selectedFood.menu_id]: option,
+                        [selectedFood.menu_id]: e.target.value,
                       }))
                     }
-                    className={`px-4 py-2 rounded-full border ${
-                      specialRequestByMenu[selectedFood.menu_id] === option
-                        ? "bg-orange-500 text-white border-orange-500"
-                        : "bg-white text-gray-800 border-gray-300"
-                    }`}
+                    placeholder="เพิ่มรายละเอียดเพิ่มเติม เช่น ไม่เผ็ด, ไม่ใส่ผัก"
+                  />
+                </>
+              )}
+
+              {selectedFood.special === 1 && (
+                <div className="flex gap-4">
+                  <button
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 px-6 rounded-lg font-medium"
+                    onClick={() =>
+                      handleAddToOrder(
+                        selectedFood.menu_id,
+                        selectedFood.menu_name,
+                        selectedFood.menu_image,
+                        selectedFood.price,
+                        selectedFood.special
+                      )
+                    }
                   >
-                    {option}
+                    เพิ่มลงตะกร้า
                   </button>
-                ))}
-              </div>
-
-              <h3 className="text-xl font-semibold mb-2">
-                รายละเอียดเพิ่มเติม
-              </h3>
-              <input
-                className="w-full p-2 border border-gray-500 rounded mb-6"
-                type="text"
-                value={noteByMenu[selectedFood.menu_id] || ""}
-                onChange={(e) =>
-                  setNoteByMenu((prev) => ({
-                    ...prev,
-                    [selectedFood.menu_id]: e.target.value,
-                  }))
-                }
-                placeholder="เพิ่มรายละเอียดเพิ่มเติม เช่น ไม่เผ็ด, ไม่ใส่ผัก"
-              />
-
-              <div className="flex gap-4">
-                <button
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 px-6 rounded-lg font-medium"
-                  onClick={() =>
-                    handleAddToOrder(
-                      selectedFood.menu_id,
-                      selectedFood.menu_name,
-                      selectedFood.menu_image,
-                      selectedFood.price
-                    )
-                  }
-                >
-                  เพิ่มลงตะกร้า
-                </button>
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

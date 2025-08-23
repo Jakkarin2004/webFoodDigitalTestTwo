@@ -115,26 +115,6 @@ const Sidebar = ({ children, isOpen = true, onToggle }) => {
   const navigate = useNavigate();
   console.log("orderCount:", orderCount);
 
-  // useEffect(() => {
-  //   const fetchOrderCount = async () => {
-  //     try {
-  //       const token = useAuthStore.getState().token;
-  //       console.log('orderCount:', orderCount); // ✅ ควรมีค่า เช่น 3
-
-  //       const res = await axios.get('http://localhost:3000/api/owner/orders/count', {
-  //         headers: {
-  //           Authorization: `Bearer ${token}` // ถ้ามี verifyToken
-  //         }
-  //       });
-  //       setOrderCount(res.data.count);
-  //     } catch (err) {
-  //       console.error('โหลดจำนวนออเดอร์ล้มเหลว:', err);
-  //     }
-  //   };
-
-  //   fetchOrderCount();
-  // }, []);
-
   const menuItems = [
     // {
     //   id: 'dashboard',
@@ -183,17 +163,17 @@ const Sidebar = ({ children, isOpen = true, onToggle }) => {
       icon: Gift,
       path: "/table",
     },
-    // {
-    //   id: 'reviews',
-    //   label: 'รีวิว',
-    //   icon: Star,
-    //   badge: '2'
-    // },
     {
       id: "history",
       label: "ประวัติคำสั่งซื้อ",
       icon: FileText,
       path: "/order-history",
+    },
+    {
+      id: "sale",
+      label: "ยอดขาย",
+      icon: FileText,
+      path: "/order-sale",
     },
   ];
 

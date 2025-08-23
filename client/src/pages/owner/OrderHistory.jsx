@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import {
   Calendar,
@@ -18,6 +18,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import useAuthStore from "../../stores/authStore";
+import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 
 const OrderHistory = () => {
   const [receipts, setReceipts] = useState([]);
@@ -27,6 +29,7 @@ const OrderHistory = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const token = useAuthStore((state) => state.token);
+  const modalRef = useRef(null); // Ref สำหรับจับภาพ modal
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -40,16 +43,19 @@ const OrderHistory = () => {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/owner/order-history/all", {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const res = await fetch(
+          "http://localhost:3000/api/owner/order-history/all",
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
         const data = await res.json();
         if (res.ok) {
           setReceipts(data.receipts);
-          setFilteredReceipts(data.receipts); // เริ่มต้นด้วยข้อมูลทั้งหมด
+          setFilteredReceipts(data.receipts);
         } else {
           console.error(data.message);
         }
@@ -67,17 +73,24 @@ const OrderHistory = () => {
   const currentReceipts = filteredReceipts.slice(startIndex, endIndex);
 
   // Filter functions
-  const getAvailableYears = () => [
-    ...new Set(filteredReceipts.flatMap(r => r.orders.map(o => new Date(o.order_time).getFullYear()))),
-  ].sort((a, b) => b - a);
+  const getAvailableYears = () =>
+    [
+      ...new Set(
+        receipts.flatMap((r) =>
+          r.orders.map((o) => new Date(o.order_time).getFullYear())
+        )
+      ),
+    ].sort((a, b) => b - a);
 
   const getAvailableMonths = (year) =>
     year
       ? [
           ...new Set(
-            filteredReceipts
-              .flatMap(r => r.orders)
-              .filter((o) => new Date(o.order_time).getFullYear() === parseInt(year))
+            receipts
+              .flatMap((r) => r.orders)
+              .filter(
+                (o) => new Date(o.order_time).getFullYear() === parseInt(year)
+              )
               .map((o) => new Date(o.order_time).getMonth() + 1)
           ),
         ].sort((a, b) => a - b)
@@ -87,8 +100,8 @@ const OrderHistory = () => {
     year && month
       ? [
           ...new Set(
-            filteredReceipts
-              .flatMap(r => r.orders)
+            receipts
+              .flatMap((r) => r.orders)
               .filter((o) => {
                 const date = new Date(o.order_time);
                 return (
@@ -149,8 +162,18 @@ const OrderHistory = () => {
 
   const getMonthName = (month) => {
     const months = [
-      "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-      "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
+      "มกราคม",
+      "กุมภาพันธ์",
+      "มีนาคม",
+      "เมษายน",
+      "พฤษภาคม",
+      "มิถุนายน",
+      "กรกฎาคม",
+      "สิงหาคม",
+      "กันยายน",
+      "ตุลาคม",
+      "พฤศจิกายน",
+      "ธันวาคม",
     ];
     return months[month - 1];
   };
@@ -160,19 +183,26 @@ const OrderHistory = () => {
 
     if (filters.year) {
       filtered = filtered.filter((r) =>
-        r.orders.some((o) => new Date(o.order_time).getFullYear() === parseInt(filters.year))
+        r.orders.some(
+          (o) => new Date(o.order_time).getFullYear() === parseInt(filters.year)
+        )
       );
     }
 
     if (filters.month) {
       filtered = filtered.filter((r) =>
-        r.orders.some((o) => new Date(o.order_time).getMonth() + 1 === parseInt(filters.month))
+        r.orders.some(
+          (o) =>
+            new Date(o.order_time).getMonth() + 1 === parseInt(filters.month)
+        )
       );
     }
 
     if (filters.day) {
       filtered = filtered.filter((r) =>
-        r.orders.some((o) => new Date(o.order_time).getDate() === parseInt(filters.day))
+        r.orders.some(
+          (o) => new Date(o.order_time).getDate() === parseInt(filters.day)
+        )
       );
     }
 
@@ -183,12 +213,22 @@ const OrderHistory = () => {
     }
 
     if (filters.searchTerm) {
-      filtered = filtered.filter((r) =>
-        r.receipt_code.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-        r.orders.some((o) =>
-          o.pending_order_id.toString().toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-          o.table_number.toString().toLowerCase().includes(filters.searchTerm.toLowerCase())
-        )
+      filtered = filtered.filter(
+        (r) =>
+          r.receipt_code
+            .toLowerCase()
+            .includes(filters.searchTerm.toLowerCase()) ||
+          r.orders.some(
+            (o) =>
+              o.pending_order_id
+                .toString()
+                .toLowerCase()
+                .includes(filters.searchTerm.toLowerCase()) ||
+              o.table_number
+                .toString()
+                .toLowerCase()
+                .includes(filters.searchTerm.toLowerCase())
+          )
       );
     }
 
@@ -227,10 +267,15 @@ const OrderHistory = () => {
   };
 
   const getTotalStats = () => {
-    const completed = filteredReceipts.flatMap(r => r.orders).filter((o) => o.status === "completed");
-    const totalRevenue = completed.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
+    const completed = filteredReceipts
+      .flatMap((r) => r.orders)
+      .filter((o) => o.status === "completed");
+    const totalRevenue = completed.reduce(
+      (sum, o) => sum + (parseFloat(o.total_price) || 0),
+      0
+    );
     return {
-      totalOrders: filteredReceipts.flatMap(r => r.orders).length,
+      totalOrders: filteredReceipts.flatMap((r) => r.orders).length,
       completedOrders: completed.length,
       totalRevenue: totalRevenue,
     };
@@ -294,13 +339,253 @@ const OrderHistory = () => {
 
   const getFilterDisplayText = () => {
     if (filters.day && filters.month && filters.year) {
-      return `${filters.day} ${getMonthName(parseInt(filters.month))} ${filters.year}`;
+      return `${filters.day} ${getMonthName(parseInt(filters.month))} ${
+        filters.year
+      }`;
     } else if (filters.month && filters.year) {
       return `${getMonthName(parseInt(filters.month))} ${filters.year}`;
     } else if (filters.year) {
       return `ปี ${filters.year}`;
     }
     return "ทั้งหมด";
+  };
+
+  // ฟังก์ชันสร้าง PDF
+  const generatePDF = async (receipt) => {
+    try {
+      // สร้าง PDFDocument
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.registerFontkit();
+
+      // โหลดฟอนต์ภาษาไทย (เช่น Sarabun หรือ Noto Sans Thai)
+      const fontUrl = "/fonts/Sarabun-Regular.ttf"; // แก้ไขให้ตรงกับตำแหน่งฟอนต์ในโปรเจกต์
+      const fontBytes = await fetch(fontUrl).then((res) => res.arrayBuffer());
+      const font = await pdfDoc.embedFont(fontBytes, { subset: true });
+
+      // ขนาดฟอนต์และสี
+      const fontSize = 12;
+      const headerFontSize = 16;
+      const textColor = rgb(0, 0, 0);
+      const headerColor = rgb(0, 0, 0); // สีน้ำเงินเข้มสำหรับส่วนหัว
+      const totalColor = rgb(0, 0.6, 0); // สีเขียวสำหรับยอดรวม
+
+      // เพิ่มหน้าแรก
+      let page = pdfDoc.addPage([595, 842]); // ขนาด A4
+      let { width, height } = page.getSize();
+      let yPosition = height - 50;
+
+      // ฟังก์ชันตรวจสอบและเพิ่มหน้าใหม่
+      const checkAndAddPage = () => {
+        if (yPosition < 50) {
+          page = pdfDoc.addPage([595, 842]);
+          yPosition = height - 50;
+        }
+      };
+
+      // หัวข้อใบเสร็จ
+      page.drawText(`ใบเสร็จ #${receipt.receipt_code}`, {
+        x: 50,
+        y: yPosition,
+        size: headerFontSize,
+        font,
+        color: headerColor,
+      });
+      yPosition -= 30;
+
+      // วาดเส้นแบ่ง
+      page.drawLine({
+        start: { x: 50, y: yPosition },
+        end: { x: width - 50, y: yPosition },
+        thickness: 1,
+        color: rgb(0, 0, 0),
+      });
+      yPosition -= 20;
+
+      // รายการคำสั่งซื้อ
+      receipt.orders.forEach((order) => {
+        checkAndAddPage();
+
+        // หัวข้อคำสั่งซื้อ
+        page.drawText(
+          `คำสั่งซื้อ #${order.pending_order_id} (โต๊ะ ${order.table_number})`,
+          {
+            x: 50,
+            y: yPosition,
+            size: fontSize + 2,
+            font,
+            color: headerColor,
+          }
+        );
+        yPosition -= 20;
+
+        // ข้อมูลคำสั่งซื้อ
+        page.drawText(`เวลาสั่ง: ${formatDateTime(order.order_time)}`, {
+          x: 50,
+          y: yPosition,
+          size: fontSize,
+          font,
+          color: textColor,
+        });
+        yPosition -= 15;
+
+        page.drawText(`สถานะ: ${getStatusText(order.status)}`, {
+          x: 50,
+          y: yPosition,
+          size: fontSize,
+          font,
+          color: textColor,
+        });
+        yPosition -= 20;
+
+        // หัวตารางรายการอาหาร
+        page.drawText("รายการอาหาร", {
+          x: 50,
+          y: yPosition +8,
+          size: fontSize,
+          font,
+          color: headerColor,
+        });
+        yPosition -= 15;
+
+        // วาดตารางสำหรับรายการอาหาร
+        const tableTop = yPosition;
+        const tableWidth = width - 100;
+        const columnWidths = [200, 50, 100, 100]; // ความกว้างคอลัมน์: ชื่อ, จำนวน, ราคา, หมายเหตุ
+        const rowHeight = 20;
+
+        // วาดหัวตาราง
+        page.drawRectangle({
+          x: 50,
+          y: yPosition,
+          width: tableWidth,
+          height: rowHeight,
+          borderWidth: 1,
+          borderColor: rgb(0, 0, 0),
+          color: rgb(0.95, 0.95, 0.95), // สีพื้นหลังเทาอ่อน
+        });
+        page.drawText("เมนู", {
+          x: 55,
+          y: yPosition + 5,
+          size: fontSize,
+          font,
+          color: textColor,
+        });
+        page.drawText("จำนวน", {
+          x: 255,
+          y: yPosition + 5,
+          size: fontSize,
+          font,
+          color: textColor,
+        });
+        page.drawText("ราคา", {
+          x: 305,
+          y: yPosition + 5,
+          size: fontSize,
+          font,
+          color: textColor,
+        });
+        page.drawText("หมายเหตุ", {
+          x: 405,
+          y: yPosition + 5,
+          size: fontSize,
+          font,
+          color: textColor,
+        });
+        yPosition -= rowHeight;
+
+        // วาดแถวสำหรับรายการอาหาร
+        order.items?.forEach((item) => {
+          checkAndAddPage();
+
+          page.drawRectangle({
+            x: 50,
+            y: yPosition,
+            width: tableWidth,
+            height: rowHeight,
+            borderWidth: 1,
+            borderColor: rgb(0, 0, 0),
+          });
+
+          // ตัดข้อความเมนูถ้ายาวเกิน
+          const menuText =
+            item.menu_name.length > 20
+              ? item.menu_name.substring(0, 17) + "..."
+              : item.menu_name;
+          page.drawText(menuText, {
+            x: 55,
+            y: yPosition + 5,
+            size: fontSize,
+            font,
+            color: textColor,
+          });
+          page.drawText(`${item.quantity}`, {
+            x: 255,
+            y: yPosition + 5,
+            size: fontSize,
+            font,
+            color: textColor,
+          });
+          page.drawText(formatPrice(item.price * item.quantity), {
+            x: 305,
+            y: yPosition + 5,
+            size: fontSize,
+            font,
+            color: textColor,
+          });
+          page.drawText(item.note || "-", {
+            x: 405,
+            y: yPosition + 5,
+            size: fontSize,
+            font,
+            color: textColor,
+          });
+
+          yPosition -= rowHeight;
+
+          // เพิ่มระดับการเสิร์ฟถ้ามี
+          if (item.specialRequest) {
+            checkAndAddPage();
+            page.drawText(`ระดับการเสิร์ฟ: ${item.specialRequest}`, {
+              x: 70,
+              y: yPosition + 10,
+              size: fontSize - 2,
+              font,
+              color: textColor,
+            });
+            yPosition -= 15;
+          }
+        });
+
+        yPosition -= 20;
+      });
+
+      // ยอดรวม
+      checkAndAddPage();
+      const totalPrice = receipt.orders.reduce(
+        (sum, order) => sum + (parseFloat(order.total_price) || 0),
+        0
+      );
+      page.drawText(`ยอดรวมทั้งใบเสร็จ: ${formatPrice(totalPrice)}`, {
+        x: 50,
+        y: yPosition,
+        size: headerFontSize,
+        font,
+        color: totalColor,
+      });
+
+      // บันทึก PDF
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `receipt_${receipt.receipt_code}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("เกิดข้อผิดพลาดในการสร้าง PDF:", error);
+      alert("ไม่สามารถสร้าง PDF ได้ กรุณาลองอีกครั้ง");
+    }
   };
 
   const stats = getTotalStats();
@@ -331,7 +616,7 @@ const OrderHistory = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowFilterModal(true)}
-                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white px-6 py-3 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2"
+                className="bg-orange-500 from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white px-6 py-3 rounded-xl font-semibold shadow-lg transform hover:scale-105 transition-all duration-200 flex items-center gap-2"
               >
                 <Filter size={20} />
                 กรองข้อมูล
@@ -408,16 +693,20 @@ const OrderHistory = () => {
                     </label>
                     <select
                       value={filters.day}
-                      onChange={(e) => setFilters({ ...filters, day: e.target.value })}
+                      onChange={(e) =>
+                        setFilters({ ...filters, day: e.target.value })
+                      }
                       disabled={!filters.year || !filters.month}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <option value="">เลือกวัน</option>
-                      {getAvailableDays(filters.year, filters.month).map((day) => (
-                        <option key={day} value={day}>
-                          {day}
-                        </option>
-                      ))}
+                      {getAvailableDays(filters.year, filters.month).map(
+                        (day) => (
+                          <option key={day} value={day}>
+                            {day}
+                          </option>
+                        )
+                      )}
                     </select>
                   </div>
                 </div>
@@ -427,7 +716,9 @@ const OrderHistory = () => {
                   </label>
                   <select
                     value={filters.status}
-                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                    onChange={(e) =>
+                      setFilters({ ...filters, status: e.target.value })
+                    }
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
                   >
                     <option value="all">ทั้งหมด</option>
@@ -457,11 +748,24 @@ const OrderHistory = () => {
 
         {/* Modal รายละเอียดคำสั่งซื้อ */}
         {selectedOrder && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-8 w-full max-w-2xl shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+          // ในส่วน modal และปุ่ม
+          <div
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={(e) => {
+              if (e.target.classList.contains("fixed")) {
+                setSelectedOrder(null);
+              }
+            }}
+          >
+            <div
+              ref={modalRef}
+              className="bg-white rounded-2xl p-8 w-full max-w-3xl shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* หัวข้อใบเสร็จ */}
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800">
-                  รายละเอียดคำสั่งซื้อ #{selectedOrder.receipt_code}
+                  ใบเสร็จ #{selectedOrder.receipt_code}
                 </h2>
                 <button
                   onClick={() => setSelectedOrder(null)}
@@ -471,85 +775,110 @@ const OrderHistory = () => {
                 </button>
               </div>
 
-              {selectedOrder.orders.map((order) => (
-                <div key={order.pending_order_id} className="mb-6 bg-gray-50 rounded-xl p-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-gray-600 text-sm">Order ID</p>
-                      <p className="text-xl font-bold text-blue-600">
-                        #{order.pending_order_id}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600 text-sm">โต๊ะหมายเลข</p>
-                      <p className="text-xl font-bold text-blue-600">
-                        {order.table_number}
-                      </p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-gray-600 text-sm">เวลาสั่ง</p>
-                      <p className="text-lg font-semibold text-gray-800">
-                        {formatDateTime(order.order_time)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* รายการอาหาร */}
-                  <div className="mt-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                      รายการอาหาร
+              {/* รายการคำสั่งซื้อทั้งหมดในใบเสร็จ */}
+              <div className="space-y-6">
+                {selectedOrder.orders.map((order, index) => (
+                  <div
+                    key={order.pending_order_id}
+                    className="bg-gray-50 rounded-xl p-6"
+                  >
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                      คำสั่งซื้อ #{order.pending_order_id} 
                     </h3>
-                    <div className="space-y-3">
-                      {order.items?.map((item) => (
-                        <div
-                          key={item.pending_item_id}
-                          className="flex justify-between items-center p-4 bg-white rounded-lg"
+                    {/* <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                      คำสั่งซื้อ #{order.pending_order_id} (โต๊ะ{" "}
+                      {order.table_number})
+                    </h3> */}
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <p className="text-gray-600 text-sm">เวลาสั่ง</p>
+                        <p className="text-lg font-semibold text-gray-800">
+                          {formatDateTime(order.order_time)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600 text-sm">สถานะ</p>
+                        <p
+                          className={`${getStatusColor(
+                            order.status
+                          )} rounded-lg px-3 py-1 text-sm inline-flex items-center gap-1 font-medium`}
                         >
-                          <div>
-                            <p className="font-semibold text-gray-800">
-                              {item.menu_name}
-                            </p>
-                            <p className="text-gray-600 text-sm">
-                              จำนวน: {item.quantity}
-                            </p>
-                            <p className="text-gray-600 text-sm">
-                              ระดับการเสิร์ฟ: {item.specialRequest || "-"}
-                            </p>
-                            <p className="text-gray-600 text-sm">
-                              รายละเอียดเพิ่มเติม: {item.note || "-"}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-green-600">
-                              {formatPrice(item.price * item.quantity)}
-                            </p>
-                            <p className="text-gray-500 text-sm">
-                              ราคาต่อหน่วย: {formatPrice(item.price)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                          {getStatusText(order.status)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* สรุปยอดรวม */}
-                  <div className="border-t pt-4 mt-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xl font-bold text-gray-800">
-                        ยอดรวมทั้งสิ้น:
-                      </span>
-                      <span className="text-2xl font-bold text-green-600">
-                        {formatPrice(order.total_price)}
-                      </span>
+                    {/* รายการอาหาร */}
+                    <div>
+                      <h4 className="text-md font-semibold text-gray-700 mb-2">
+                        รายการอาหาร
+                      </h4>
+                      <div className="space-y-3">
+                        {order.items?.map((item) => (
+                          <div
+                            key={item.pending_item_id}
+                            className="flex justify-between items-center p-4 bg-white rounded-lg"
+                          >
+                            <div>
+                              <p className="font-semibold text-gray-800">
+                                {item.menu_name}
+                              </p>
+                              <p className="text-gray-600 text-sm">
+                                จำนวน: {item.quantity}
+                              </p>
+                              <p className="text-gray-600 text-sm">
+                                ระดับการเสิร์ฟ: {item.specialRequest || "-"}
+                              </p>
+                              <p className="text-gray-600 text-sm">
+                                รายละเอียดเพิ่มเติม: {item.note || "-"}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold text-green-600">
+                                {formatPrice(item.price * item.quantity)}
+                              </p>
+                              <p className="text-gray-500 text-sm">
+                                ราคาต่อหน่วย: {formatPrice(item.price)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+
+              {/* ยอดรวมทั้งใบเสร็จ */}
+              <div className="border-t pt-6 mt-6">
+                <div className="flex justify-between items-center">
+                  <span className="text-xl font-bold text-gray-800">
+                    ยอดรวมทั้งใบเสร็จ:
+                  </span>
+                  <span className="text-2xl font-bold text-green-600">
+                    {formatPrice(
+                      selectedOrder.orders.reduce(
+                        (sum, order) =>
+                          sum + (parseFloat(order.total_price) || 0),
+                        0
+                      )
+                    )}
+                  </span>
                 </div>
-              ))}
+              </div>
 
-              <div className="mt-6 text-center">
+              {/* ปุ่มใน modal */}
+              <div className="mt-6 text-center flex justify-center gap-4">
+                <button
+                  onClick={() => generatePDF(selectedOrder)}
+                  className="bg-green-500 text-white px-8 py-3 rounded-xl hover:bg-green-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl font-medium flex items-center gap-2"
+                >
+                  <Printer className="w-5 h-5" />
+                  พิมพ์ใบเสร็จ
+                </button>
                 <button
                   onClick={() => setSelectedOrder(null)}
-                  className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-8 py-3 rounded-xl hover:from-orange-600 hover:to-amber-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl font-medium"
+                  className="bg-orange-500 text-white px-8 py-3 rounded-xl hover:bg-orange-600 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl font-medium"
                 >
                   ปิด
                 </button>
@@ -565,7 +894,6 @@ const OrderHistory = () => {
               <thead>
                 <tr className="bg-gradient-to-r from-orange-500 to-amber-500">
                   <th className="px-6 py-4 text-white font-semibold text-center">
-                    {/* รหัสคำสั่งซื้อ */}
                     ลำดับ
                   </th>
                   <th className="px-6 py-4 text-white font-semibold text-center">
@@ -586,11 +914,14 @@ const OrderHistory = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {currentReceipts.map((receipt,i) => {
-                  // หา order ล่าสุดเพื่อใช้แสดงข้อมูลในตาราง
-                  const latestOrder = receipt.orders.reduce((latest, current) => {
-                    return new Date(latest.order_time) > new Date(current.order_time) ? latest : current;
-                  }, receipt.orders[0]);
+                {currentReceipts.map((receipt, i) => {
+                  const latestOrder = receipt.orders.reduce(
+                    (latest, current) =>
+                      new Date(latest.order_time) > new Date(current.order_time)
+                        ? latest
+                        : current,
+                    receipt.orders[0]
+                  );
 
                   return (
                     <tr
@@ -598,8 +929,7 @@ const OrderHistory = () => {
                       className="hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 transition-all duration-200"
                     >
                       <td className="px-6 py-4 font-medium text-gray-800 text-center">
-                        {/* {receipt.receipt_code}  */} {i+1}
-
+                        {i + 1}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="bg-blue-100 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center font-bold mx-auto">
@@ -613,14 +943,19 @@ const OrderHistory = () => {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div
-                          className={`${getStatusColor(latestOrder.status)} rounded-lg px-3 py-1 text-sm inline-flex items-center gap-1 font-medium`}
+                          className={`${getStatusColor(
+                            latestOrder.status
+                          )} rounded-lg px-3 py-1 text-sm inline-flex items-center gap-1 font-medium`}
                         >
                           {getStatusText(latestOrder.status)}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center font-semibold text-green-600">
                         {formatPrice(
-                          receipt.orders.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0)
+                          receipt.orders.reduce(
+                            (sum, o) => sum + (parseFloat(o.total_price) || 0),
+                            0
+                          )
                         )}
                       </td>
                       <td className="px-6 py-4 text-center">
@@ -631,12 +966,6 @@ const OrderHistory = () => {
                             title="ดูรายละเอียด"
                           >
                             <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            className="p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-lg transition-all duration-200 transform hover:scale-110"
-                            title="พิมพ์ใบเสร็จ"
-                          >
-                            <Printer className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -684,7 +1013,8 @@ const OrderHistory = () => {
               <span className="text-sm text-gray-600">รายการต่อหน้า</span>
             </div>
             <div className="text-sm text-gray-600">
-              แสดง {startIndex + 1} - {Math.min(endIndex, filteredReceipts.length)} จาก{" "}
+              แสดง {startIndex + 1} -{" "}
+              {Math.min(endIndex, filteredReceipts.length)} จาก{" "}
               {filteredReceipts.length} รายการ
             </div>
             <div className="flex items-center gap-2">
